@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "formatters": {
+    "detailed": {
+      "format": "%(asctime)s - %(name)s:%(lineno)s - %(levelname)s - %(message)s"
+    }
+  },
+  "handlers": {
+    "std": {
+      "class": "logging.StreamHandler",
+      "level": "DEBUG",
+      "formatter": "detailed"
+    },
+    "file": {
+      "class": "logging.handlers.RotatingFileHandler",
+      "level": "INFO",
+      "formatter": "detailed",
+      "filename": "../logs/log",
+      "mode": "a",
+      "maxBytes": 100000,
+      "backupCount": 2
+    }
+  },
+  "loggers": {
+    "bot": {
+      "handlers": ["std", "file"],
+      "level": "DEBUG"
+    }
+  }
+}
