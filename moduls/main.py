@@ -25,6 +25,8 @@ LOGGER = logging.getLogger('bot')
 
 HISTORY = []
 
+BUY_PRICE = 0
+
 
 def init_logging():
     logging.config.dictConfig(get_log_config())
@@ -35,7 +37,7 @@ def get_log_config() -> dict:
         return json.load(config)
 
 
-def klines(symbol: str, interval: str, start_str: str) -> DataFrame:
+async def klines(symbol: str, interval: str, start_str: str) -> DataFrame:
     """Requests pair data from binance api"""
     try:
         symbol_data = pd.DataFrame(client.get_historical_klines(
@@ -67,44 +69,50 @@ def sell_signal(symbol_data: DataFrame) -> bool:
 async def print_1h_change():
     """Outputs the percentage of change in the price of ETH if
     the price has changed by more than 1% in the last hour."""
-    candles = klines('ETHUSDT', '1h', '2h UTC')
-    h_change = (float(candles.Close[1]) - float(candles.Open[1])) * 100 / float(candles.Open[1])
+    while True:
+        candles = await klines('ETHUSDT', '1h', '2h UTC')
+        h_change = (float(candles.Close[1]) - float(candles.Open[1])) * 100 / float(candles.Open[1])
 
-    if abs(h_change) >= 1:
-        LOGGER.debug(f'{h_change:.02}%')
-
-    await asyncio.sleep(5)
-    await print_1h_change()
+        if abs(h_change) >= 1:
+            LOGGER.debug(f'{h_change:.02}%')
+        await asyncio.sleep(0)
 
 
 async def entry_point_search(symbol: str, quantity: int, signal=buy_signal):
     """Waits for a buy or sell signal, when it is received, recursively changes the signal search strategy."""
-    global HISTORY
-    buy_price = 0
+    global HISTORY, BUY_PRICE
     while True:
-        symbol_data = klines(symbol, '1m', 'start_str')
+        symbol_data = await klines(symbol, '1m', '40m UTC')
         if signal(symbol_data):
             if signal.__name__ == 'buy_signal':
                 # order = client.futures_create_order(symbol=symbol, side='BUY', type='MARKET', quantity=quantity)
 
-                buy_price = float(symbol_data.Close[-1])
+                BUY_PRICE = float(symbol_data.Close[-1])
 
-                LOGGER.info(f'Buy signal. New futures order. Price: {buy_price} Quantity: {quantity}')
+                LOGGER.info(f'Buy signal. New futures order. Price: {BUY_PRICE} Quantity: {quantity}')
 
                 await entry_point_search(symbol, quantity, sell_signal)
             else:
                 # order = client.futures_create_order(symbol=symbol, side='SELL', type='MARKET', quantity=quantity)
 
                 sell_price = float(symbol_data.Close[-1])
-                percentage_change = 100 - (100 * buy_price) / sell_price
-                HISTORY.append((buy_price, sell_price, percentage_change))
+                percentage_change = 100 - (100 * BUY_PRICE) / sell_price
+                HISTORY.append((BUY_PRICE, sell_price, percentage_change))
                 apr = sum(order[2] for order in HISTORY)
                 positive = sum(1 if order[1] - order[0] >= 0 else 0 for order in HISTORY)
 
                 LOGGER.info(f'Sell signal. New futures order. Price: {sell_price} Quantity: {quantity}')
-                LOGGER.info(f'Sum all orders: {apr}%\nCount orders: {len(HISTORY)}\nPositive orders: {positive}')
+                LOGGER.info(f'Sum all orders: {apr:.04}%\nCount orders: {len(HISTORY)}\nPositive orders: {positive}')
 
                 await entry_point_search(symbol, quantity, buy_signal)
+        await asyncio.sleep(0)
+
+
+async def main():
+    print_1h_change_task = asyncio.create_task(print_1h_change())
+    entry_point_search_task = asyncio.create_task(entry_point_search('ETHBTC', 0))
+
+    await asyncio.wait([print_1h_change_task, entry_point_search_task])
 
 
 if __name__ == '__main__':
@@ -113,5 +121,8 @@ if __name__ == '__main__':
     LOGGER.info('Bot was initialized.')
     client = Client(api_key=API_KEY, api_secret=SECRET)
     LOGGER.info('Client was initialized.')
-    asyncio.run(print_1h_change())
-    asyncio.run(entry_point_search('ETHBTC', 0))
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    asyncio.run(main())
+
