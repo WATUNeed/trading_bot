@@ -11,6 +11,7 @@ from time import sleep
 
 API_KEY = environ.get('API_KEY')
 SECRET = environ.get('SECRET')
+
 HISTORY = []
 
 
