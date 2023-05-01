@@ -20,6 +20,7 @@ from rich import print
 
 API_KEY = environ.get('API_KEY')
 SECRET = environ.get('SECRET')
+
 LOGGER = logging.getLogger('bot')
 
 HISTORY = []
